@@ -1,15 +1,13 @@
-// Likensy challenge player: the same scene-graph scorer and LS1 link format as the app.
+// Likensy challenge player: the same likeness judge and LS1 link format as the app.
 // Board 1000 x 1000, y down; rotation in degrees counter-clockwise; raw DEFLATE + base64url payloads.
 "use strict";
 const LK = (() => {
-  const KINDS = ["circle", "ellipse", "rect", "rrect", "triangle", "line", "polyline", "arc", "polygon"];
-  const LABEL = { circle: "circle", ellipse: "oval", rect: "rectangle", rrect: "rounded rectangle", triangle: "triangle", line: "line", polyline: "path", arc: "arc", polygon: "shape" };
-  const STROKE = 28, DIAG = Math.hypot(1000, 1000);
-  const BANDS = {
-    1: { center: 0.12, lo: 0.55, hi: 1.8, rot: 25, iou: 0.35 },
-    2: { center: 0.07, lo: 0.75, hi: 1.33, rot: 12, iou: 0.55 },
-    3: { center: 0.045, lo: 0.85, hi: 1.18, rot: 8, iou: 0.7 },
-  };
+  const KINDS = ["circle", "ellipse", "rect", "rrect", "triangle", "line", "polyline", "arc", "polygon", "stroke"];
+  const LABEL = { circle: "circle", ellipse: "oval", rect: "rectangle", rrect: "rounded rectangle", triangle: "triangle", line: "line", polyline: "path", arc: "arc", polygon: "shape", stroke: "line" };
+  const STROKE = 28, PEN = 16, OUTLINE = 14, MAX_SHAPES = 250;
+  // The judge's settings. Keep in step with Judge.kt.
+  const JUDGE = { pass: 60, tols: [16, 32, 56], span: 800, minSize: 80, partTol: 32, partOk: 0.55, partMissing: 0.35 };
+  JUDGE.two = Math.min(JUDGE.pass + 15, 95); JUDGE.three = Math.min(JUDGE.pass + 27, 97);
 
   // ---------- link codec ----------
   function b64urlToBytes(s) {
@@ -44,7 +42,9 @@ const LK = (() => {
     const palette = []; for (let i = 0; i < pn; i++) { const r = u8(), g = u8(), b = u8(); palette.push(`rgb(${r},${g},${b})`); }
     const text8 = () => { const n = u8(); const s = new TextDecoder().decode(raw.slice(o, o + n)); o += n; return s; };
     const title = flags & 1 ? text8() : ""; const author = flags & 2 ? text8() : "";
-    const sn = u8(); if (sn < 1 || sn > 40) throw new Error("bad");
+    const sn = u8(); if (sn < 1 || sn > MAX_SHAPES) throw new Error("bad");
+    const varint = () => { let x = 0, sh = 0; for (;;) { const b = u8(); x |= (b & 0x7f) << sh; if (b < 0x80) return x >>> 0; sh += 7; if (sh >= 28) throw new Error("bad"); } };
+    const unzig = (x) => (x >>> 1) ^ -(x & 1);
     const shapes = [];
     for (let i = 0; i < sn; i++) {
       const kind = KINDS[u8()]; if (!kind) throw new Error("bad");
@@ -53,6 +53,10 @@ const LK = (() => {
       if (kind === "rrect") s.corner = i16();
       else if (kind === "polygon" || kind === "polyline") { const n = u8(); for (let k = 0; k < n; k++) s.points.push({ x: i16(), y: i16() }); }
       else if (kind === "arc") s.sweep = i16() / 10;
+      else if (kind === "stroke") {
+        const n = varint(); if (n < 1 || n > 4000) throw new Error("bad");
+        let px = 0, py = 0; for (let k = 0; k < n; k++) { px += unzig(varint()); py += unzig(varint()); s.points.push({ x: px, y: py }); }
+      }
       shapes.push(s);
     }
     const rn = u8(); const required = []; for (let i = 0; i < rn; i++) required.push(u8());
@@ -97,8 +101,58 @@ const LK = (() => {
       case "line": return [R(capsule({ x: -s.w / 2, y: 0 }, { x: s.w / 2, y: 0 }))];
       case "polyline": { const o = []; for (let i = 1; i < s.points.length; i++) o.push(R(capsule(s.points[i - 1], s.points[i]))); return o; }
       case "arc": return [R(arcBand(s.w / 2, s.sweep))];
+      case "stroke": {
+        const pts = s.points.map(p => ({ x: s.cx + p.x, y: s.cy + p.y }));
+        if (pts.length === 1) return [capsule(pts[0], pts[0], s.w / 2)];
+        const o = []; for (let i = 1; i < pts.length; i++) o.push(capsule(pts[i - 1], pts[i], Math.max(s.w / 2, 4))); return o;
+      }
     }
     return [];
+  }
+
+  // The visible lines of a shape as evenly spaced points (what the judge compares).
+  function ink(s, step = 8) {
+    let path, closed = false;
+    switch (s.kind) {
+      case "stroke": path = s.points.map(p => ({ x: s.cx + p.x, y: s.cy + p.y })); break;
+      case "line": path = [{ x: -s.w / 2, y: 0 }, { x: s.w / 2, y: 0 }].map(p => rot(p, s.rotation, s.cx, s.cy)); break;
+      case "polyline": path = s.points.map(p => rot(p, s.rotation, s.cx, s.cy)); break;
+      case "arc": {
+        const r = s.w / 2, st = -90 - s.sweep / 2, n = 24; path = [];
+        for (let i = 0; i <= n; i++) { const t = (st + s.sweep * i / n) * Math.PI / 180; path.push(rot({ x: r * Math.cos(t), y: r * Math.sin(t) }, s.rotation, s.cx, s.cy)); }
+        break;
+      }
+      default: path = rings(s)[0] || []; closed = true;
+    }
+    return resample(closed && path.length ? path.concat([path[0]]) : path, step);
+  }
+  function resample(path, step) {
+    if (!path.length) return [];
+    const out = [path[0]]; let carry = 0;
+    for (let k = 1; k < path.length; k++) {
+      const a = path[k - 1], b = path[k], len = Math.hypot(b.x - a.x, b.y - a.y);
+      if (len <= 0) continue;
+      let d = step - carry;
+      while (d <= len) { const t = d / len; out.push({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t }); d += step; }
+      carry = len - (d - step);
+    }
+    return out;
+  }
+  function segDist(p, a, b) {
+    const dx = b.x - a.x, dy = b.y - a.y, l2 = dx * dx + dy * dy;
+    const t = l2 === 0 ? 0 : Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / l2));
+    return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
+  }
+  function simplify(path, eps = 2.5) {
+    if (path.length < 3) return path;
+    const keep = new Uint8Array(path.length); keep[0] = keep[path.length - 1] = 1;
+    const st = [[0, path.length - 1]];
+    while (st.length) {
+      const [i, j] = st.pop(); let far = -1, dmax = eps;
+      for (let k = i + 1; k < j; k++) { const d = segDist(path[k], path[i], path[j]); if (d > dmax) { dmax = d; far = k; } }
+      if (far >= 0) { keep[far] = 1; st.push([i, far], [far, j]); }
+    }
+    return path.filter((_, k) => keep[k]);
   }
   function inside(ring, x, y) {
     let c = false;
@@ -110,92 +164,57 @@ const LK = (() => {
   }
   const covers = (rs, x, y) => rs.some(r => inside(r, x, y));
   function bounds(rs) { let l = 1e9, t = 1e9, r = -1e9, b = -1e9; for (const ring of rs) for (const p of ring) { l = Math.min(l, p.x); t = Math.min(t, p.y); r = Math.max(r, p.x); b = Math.max(b, p.y); } return { l, t, r, b }; }
-  function iou(a, b, grid = 72) {
-    const ra = rings(a), rb = rings(b), ba = bounds(ra), bb = bounds(rb);
-    const l = Math.min(ba.l, bb.l), t = Math.min(ba.t, bb.t), r = Math.max(ba.r, bb.r), btm = Math.max(ba.b, bb.b);
-    const sx = (r - l) / grid, sy = (btm - t) / grid; if (sx <= 0 || sy <= 0) return 0;
-    let both = 0, either = 0;
-    for (let i = 0; i < grid; i++) { const y = t + (i + 0.5) * sy;
-      for (let j = 0; j < grid; j++) { const x = l + (j + 0.5) * sx;
-        const A = x >= ba.l && x <= ba.r && y >= ba.t && y <= ba.b && covers(ra, x, y);
-        const B = x >= bb.l && x <= bb.r && y >= bb.t && y <= bb.b && covers(rb, x, y);
-        if (A || B) either++; if (A && B) both++; } }
-    return either ? both / either : 0;
-  }
-  function angleGap(a, b, period) { if (period <= 0) return 0; let d = Math.abs(a - b) % period; if (d > period / 2) d = period - d; return d; }
 
-  // ---------- scorer ----------
-  const roundish = s => (s.kind === "circle" || s.kind === "ellipse") && Math.abs(s.w - s.h) <= 0.05 * Math.max(s.w, s.h);
-  const boxy = k => k === "rect" || k === "rrect";
-  function period(s) {
-    switch (s.kind) {
-      case "circle": return 0;
-      case "ellipse": return roundish(s) ? 0 : 180;
-      case "rect": case "rrect": return Math.abs(s.w - s.h) <= 0.05 * Math.max(s.w, s.h) ? 90 : 180;
-      case "line": return 180;
-      default: return 360;
-    }
+  // ---------- likeness judge ----------
+  function normalizer(pts) {
+    let l = Infinity, t = Infinity, r = -Infinity, b = -Infinity;
+    for (const p of pts) { if (p.x < l) l = p.x; if (p.x > r) r = p.x; if (p.y < t) t = p.y; if (p.y > b) b = p.y; }
+    const cx = (l + r) / 2, cy = (t + b) / 2, s = JUDGE.span / Math.max(r - l, b - t, JUDGE.minSize);
+    return p => ({ x: (p.x - cx) * s + 500, y: (p.y - cy) * s + 500 });
   }
-  function eligible(t, p) {
-    if (t.color !== p.color) return false;
-    if (t.kind === p.kind) return true;
-    if (roundish(t) && roundish(p)) return true;
-    if (boxy(t.kind) && boxy(p.kind)) return (t.kind === "rrect" ? t.corner : p.corner) <= 2;
-    return false;
+  function nearest(pts) {
+    const cell = 70, grid = new Map(), key = (i, j) => i + "," + j;
+    for (const p of pts) { const k = key(Math.floor(p.x / cell), Math.floor(p.y / cell)); (grid.get(k) || grid.set(k, []).get(k)).push(p); }
+    return q => {
+      const i0 = Math.floor(q.x / cell), j0 = Math.floor(q.y / cell); let best = 9999;
+      for (let i = i0 - 1; i <= i0 + 1; i++) for (let j = j0 - 1; j <= j0 + 1; j++) { const g = grid.get(key(i, j)); if (g) for (const p of g) { const d = Math.hypot(p.x - q.x, p.y - q.y); if (d < best) best = d; } }
+      return best;
+    };
   }
-  function fit(ti, t, pi, p) {
-    const center = Math.hypot(p.cx - t.cx, p.cy - t.cy) / DIAG;
-    const rw = Math.max(p.w, 4) / Math.max(t.w, 4);
-    const rh = t.kind === "line" ? rw : Math.max(p.h, 4) / Math.max(t.h, 4);
-    const pp = period(p), per = Math.min(period(t), pp === 0 ? period(t) : pp);
-    const r = angleGap(t.rotation, p.rotation, per);
-    const ov = iou(t, Object.assign({}, p, { cx: t.cx, cy: t.cy }));
-    const sizeErr = Math.max(Math.abs(Math.log(rw)), Math.abs(Math.log(rh)));
-    const cost = 0.4 * center + 0.25 * Math.min(sizeErr / Math.log(2), 1) + 0.1 * (r / 180) + 0.25 * (1 - ov);
-    return { target: ti, player: pi, center, lo: Math.min(rw, rh), hi: Math.max(rw, rh), rot: r, iou: ov, cost };
-  }
-  const meets = (f, b) => f.center <= b.center && f.lo >= b.lo && f.hi <= b.hi && f.rot <= b.rot && f.iou >= b.iou;
-
-  function hungarian(cost) {
-    const rows = cost.length; if (!rows) return [];
-    const cols = cost[0].length, n = Math.max(rows, cols);
-    const a = []; for (let i = 0; i <= n; i++) { a.push(new Float64Array(n + 1)); }
-    for (let i = 0; i < rows; i++) for (let j = 0; j < cols; j++) a[i + 1][j + 1] = cost[i][j];
-    const u = new Float64Array(n + 1), v = new Float64Array(n + 1), p = new Int32Array(n + 1), way = new Int32Array(n + 1);
-    for (let i = 1; i <= n; i++) {
-      p[0] = i; let j0 = 0; const minv = new Float64Array(n + 1).fill(Infinity), used = new Uint8Array(n + 1);
-      do {
-        used[j0] = 1; const i0 = p[j0]; let delta = Infinity, j1 = 0;
-        for (let j = 1; j <= n; j++) if (!used[j]) { const cur = a[i0][j] - u[i0] - v[j]; if (cur < minv[j]) { minv[j] = cur; way[j] = j0; } if (minv[j] < delta) { delta = minv[j]; j1 = j; } }
-        for (let j = 0; j <= n; j++) if (used[j]) { u[p[j]] += delta; v[j] -= delta; } else minv[j] -= delta;
-        j0 = j1;
-      } while (p[j0] !== 0);
-      do { const j1 = way[j0]; p[j0] = p[j1]; j0 = j1; } while (j0);
-    }
-    const out = new Array(rows).fill(-1);
-    for (let j = 1; j <= n; j++) { const i = p[j]; if (i >= 1 && i <= rows && j <= cols) out[i - 1] = j - 1; }
-    return out;
-  }
+  function starsFor(pc) { return pc >= JUDGE.three ? 3 : pc >= JUDGE.two ? 2 : pc >= JUDGE.pass ? 1 : 0; }
 
   function score(target, player) {
-    const req = target.required.length ? target.required : target.shapes.map((_, i) => i);
-    const fits = req.map(() => new Array(player.length).fill(null));
-    const cost = req.map(() => new Array(player.length).fill(1e6));
-    req.forEach((ti, r) => player.forEach((p, pi) => { const t = target.shapes[ti]; if (eligible(t, p)) { const f = fit(ti, t, pi, p); fits[r][pi] = f; cost[r][pi] = f.cost; } }));
-    const pick = player.length ? hungarian(cost) : req.map(() => -1);
-    const chosen = [], misses = [];
-    req.forEach((ti, r) => {
-      const f = pick[r] >= 0 ? fits[r][pick[r]] : null;
-      if (!f) { misses.push({ target: ti, why: "missing" }); return; }
-      chosen.push(f);
-      if (!meets(f, BANDS[1])) misses.push({ target: ti, why: f.center > BANDS[1].center ? "place" : f.hi > BANDS[1].hi ? "big" : f.lo < BANDS[1].lo ? "small" : f.rot > BANDS[1].rot ? "turn" : "shape" });
-    });
-    const used = new Set(chosen.map(f => f.player)); const leftovers = player.filter((_, i) => !used.has(i)).length;
-    let stars = 1;
-    if (misses.length) stars = 0; else if (chosen.every(f => meets(f, BANDS[3])) && leftovers <= 1) stars = 3; else if (chosen.every(f => meets(f, BANDS[2]))) stars = 2;
-    return { stars, misses, fits: chosen, ok: new Set(chosen.filter(f => meets(f, BANDS[1])).map(f => f.target)) };
+    const req = new Set(target.required.length ? target.required : target.shapes.map((_, i) => i));
+    const tInk = target.shapes.map(s => ink(s)), tAll = tInk.flat(), pAll = player.flatMap(s => ink(s));
+    if (!tAll.length) return { percent: 0, stars: 0, misses: [], ok: new Set(), extra: false };
+    if (!pAll.length) return { percent: 0, stars: 0, misses: [...req].sort((a, b) => a - b).map(t => ({ target: t, why: "missing" })), ok: new Set(), extra: false };
+    const tn = normalizer(tAll), pn = normalizer(pAll);
+    const tPts = tAll.map(tn), pPts = pAll.map(pn);
+    const tNear = nearest(tPts), pNear = nearest(pPts);
+    const dT = tPts.map(pNear), dP = pPts.map(tNear);
+    const owner = []; tInk.forEach((pts, i) => pts.forEach(() => owner.push(i)));
+    const reqIdx = tPts.map((_, k) => k).filter(k => req.has(owner[k]));
+    const byPart = new Map(); for (const k of reqIdx) (byPart.get(owner[k]) || byPart.set(owner[k], []).get(owner[k])).push(k);
+    let fSum = 0;
+    for (const tol of JUDGE.tols) {
+      const inkR = reqIdx.filter(k => dT[k] <= tol).length / Math.max(reqIdx.length, 1);
+      const parts = [...byPart.values()].map(ix => ix.filter(k => dT[k] <= tol).length / ix.length);
+      const partR = parts.reduce((a, b) => a + b, 0) / parts.length;
+      const r = (inkR + partR) / 2, p = dP.filter(d => d <= tol).length / dP.length;
+      fSum += r + p === 0 ? 0 : 2 * r * p / (r + p);
+    }
+    const percent = Math.max(0, Math.min(100, Math.round(fSum / JUDGE.tols.length * 100)));
+    const ok = new Set(), misses = [];
+    for (const i of [...req].sort((a, b) => a - b)) {
+      const ix = byPart.get(i); if (!ix) continue;
+      const rec = ix.filter(k => dT[k] <= JUDGE.partTol).length / ix.length;
+      if (rec >= JUDGE.partOk) ok.add(i); else misses.push({ target: i, why: rec < JUDGE.partMissing ? "missing" : "off" });
+    }
+    const precision = dP.filter(d => d <= JUDGE.partTol).length / dP.length;
+    let stars = starsFor(percent); if (misses.length) stars = Math.min(stars, 1);
+    return { percent, stars, misses, ok, extra: precision < 0.7 };
   }
 
-  return { decode, deflateRaw, bytesToB64url, rings, bounds, covers, score, LABEL, STROKE };
+  return { decode, deflateRaw, bytesToB64url, rings, bounds, covers, ink, simplify, score, LABEL, STROKE, PEN, OUTLINE, JUDGE };
 })();
 if (typeof module !== "undefined") module.exports = LK;

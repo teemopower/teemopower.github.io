@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Unjunk – Privacy Policy</title>
+<style>
+  :root { --bg:#F7F4EE; --card:#fff; --text:#23272E; --muted:#5C6470; --sage:#7C9A7E; --sage-dark:#5F7D63; --line:#E4DFD5; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#1D2126; --card:#262B31; --text:#F2EFE8; --muted:#A8B0B8; --sage:#9DB892; --sage-dark:#9DB892; --line:#3A4148; } }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 720px; margin: 0 auto; padding: 48px 22px 80px; }
+  header { display:flex; align-items:center; gap:14px; margin-bottom: 28px; }
+  .mark { width:52px; height:52px; border-radius:16px; background:#23272E; display:grid; place-items:center; flex-shrink:0; }
+  h1 { font-size: 30px; line-height:1.2; margin:0; letter-spacing:-0.5px; }
+  .sub { color:var(--muted); margin:2px 0 0; font-size:14px; }
+  section { background:var(--card); border:1px solid var(--line); border-radius:22px; padding: 26px 26px 14px; margin: 0 0 18px; }
+  h2 { font-size: 20px; margin: 0 0 10px; letter-spacing:-0.3px; }
+  h3 { font-size: 16px; margin: 20px 0 4px; }
+  p, li { color: var(--text); }
+  ul { padding-left: 20px; }
+  .tldr { border-color: var(--sage); }
+  a { color: var(--sage-dark); }
+  .muted { color: var(--muted); font-size: 14px; }
+  code { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 1px 6px; font-size: 14px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="mark" aria-hidden="true">
+      <svg width="36" height="36" viewBox="0 0 100 100"><rect x="14" y="14" width="72" height="72" rx="14" fill="none" stroke="#F7F4EE" stroke-width="6"/><circle cx="62" cy="62" r="10" fill="#7C9A7E"/></svg>
+    </div>
+    <div>
+      <h1>Unjunk</h1>
+      <p class="sub">Privacy Policy · Effective November 21, 2026</p>
+    </div>
+  </header>
+
+  <section class="tldr">
+    <h2>The short version</h2>
+    <p><strong>Unjunk collects nothing.</strong> No accounts, no analytics, no tracking, no browsing history, no personal information of any kind. Everything the extension does happens inside your browser, on your device. The one exception: when you watch a YouTube video, Unjunk asks a public SponsorBlock server whether that video has sponsor segments to skip — and it does that without telling the server which video you are watching (details below).</p>
+  </section>
+
+  <section>
+    <h2>What Unjunk does</h2>
+    <p>Unjunk is a browser extension that removes ads, trackers, and cookie-consent banners from the pages you visit, and skips sponsor segments inside YouTube videos. It has one on/off switch and a counter showing how many requests it blocked today.</p>
+  </section>
+
+  <section>
+    <h2>What we collect: nothing</h2>
+    <p>Unjunk does not collect, store, transmit, or share any personal data. Specifically:</p>
+    <ul>
+      <li><strong>No accounts.</strong> There is nothing to sign up for and no login.</li>
+      <li><strong>No analytics or telemetry.</strong> We do not measure how you use the extension, which sites you visit, or anything else about your browsing.</li>
+      <li><strong>No browsing history.</strong> Your history never leaves your device.</li>
+      <li><strong>No advertising identifiers.</strong> We do not read or set any advertising ID.</li>
+    </ul>
+    <p>Ad and tracker blocking is done locally in your browser using the browser's built-in filtering engine. The filter lists (derived from the public EasyList and EasyPrivacy lists) ship inside the extension and are updated only when the extension itself updates. No filter-list updates are fetched while you browse.</p>
+    <p>The "blocked today" counter is stored only in your browser's local extension storage, on your device. It is never sent anywhere, and it resets each day.</p>
+    <p>Cookie-banner dismissal happens entirely on your device: the extension looks for a banner on the page and clicks the reject or decline option. Nothing about the page or your choice is sent anywhere.</p>
+  </section>
+
+  <section>
+    <h2>No whitelist, no paid exceptions</h2>
+    <p>Unjunk has no whitelist and no "acceptable ads" program. Nobody can pay to have their ads let through. If an ad is blocked, it stays blocked — there is no list of exceptions, paid or otherwise.</p>
+  </section>
+
+  <section>
+    <h2>YouTube sponsor skipping (SponsorBlock)</h2>
+    <p>To skip sponsor segments inside YouTube videos, Unjunk checks the public SponsorBlock database (<code>sponsor.ajay.app</code>), a community-run service that is not operated by us. This check happens only on YouTube watch pages, and only for the video you are currently watching.</p>
+    <p>To protect your privacy, Unjunk does <strong>not</strong> send the video's ID to SponsorBlock. Instead it sends only the first 4 characters of the SHA-256 hash of the video ID. That short prefix matches many different videos, so the server cannot tell which video you are watching. Unjunk then picks out the segments for your video from the server's reply, entirely on your device. No account, identifier, or other information about you is sent with the request.</p>
+    <p>If you prefer, turning Unjunk off stops these lookups entirely.</p>
+  </section>
+
+  <section>
+    <h2>Permissions, in plain language</h2>
+    <ul>
+      <li><strong>Block content (declarativeNetRequest):</strong> lets the browser block ad and tracker requests before they load.</li>
+      <li><strong>Storage:</strong> remembers only whether Unjunk is on or off, and today's blocked count — on your device only.</li>
+      <li><strong>Access to all websites:</strong> required so blocking, banner dismissal, and sponsor skipping can work on any page you visit. Unjunk does not read, copy, or transmit page content.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Children</h2>
+    <p>Unjunk is a general-audience tool. Because it collects no data at all, there is no children's data to protect.</p>
+  </section>
+
+  <section>
+    <h2>Changes to this policy</h2>
+    <p>If this policy ever changes, the updated version will be posted here with a new effective date. Since Unjunk collects nothing, a policy change cannot change what happens to your data — there isn't any.</p>
+  </section>
+
+  <section>
+    <h2>Contact</h2>
+    <p>Questions about this policy: <a href="mailto:hangrygrogu@gmail.com">hangrygrogu@gmail.com</a>.</p>
+    <p class="muted">Unjunk is made by Adaptation Apps. Unjunk is not affiliated with SponsorBlock, EasyList, YouTube, Google, or Microsoft.</p>
+  </section>
+</main>
+</body>
+</html>

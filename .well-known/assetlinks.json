@@ -1,0 +1,10 @@
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "com.adaptationapps.likensy",
+    "sha256_cert_fingerprints": [
+      "8A:2C:34:79:54:9E:83:A6:65:18:41:88:6A:F8:F4:8C:BC:8C:1C:EA:1E:5C:66:2C:73:B0:51:01:51:8C:05:D9"
+    ]
+  }
+}]

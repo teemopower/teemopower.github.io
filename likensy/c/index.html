@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Likensy · Can you draw this?</title>
+<meta name="description" content="A friend sent you a picture to copy. Build it with snapping shapes and see how close you get.">
+<meta property="og:title" content="Can you draw this?">
+<meta property="og:description" content="A Likensy challenge from a friend. Play it right here, no install needed.">
+<meta name="theme-color" content="#F6F0E4">
+<link rel="stylesheet" href="play.css">
+</head>
+<body>
+<header>
+  <div class="brand">Likensy</div>
+  <div id="from" class="from"></div>
+</header>
+<main id="app">
+  <section class="top">
+    <svg id="target" viewBox="0 0 1000 1000" aria-label="Target picture"></svg>
+    <div class="coach">
+      <p id="tip">Copy the picture with the shapes below, then tap Done.</p>
+      <button id="ghostBtn" class="small">Show guide</button>
+    </div>
+  </section>
+  <svg id="board" viewBox="0 0 1000 1000" aria-label="Drawing board"></svg>
+  <div id="selbar" class="row hidden">
+    <button data-act="turnL" aria-label="Turn left">⟲</button>
+    <button data-act="turnR" aria-label="Turn right">⟳</button>
+    <button data-act="copy" aria-label="Copy">⧉</button>
+    <button data-act="del" aria-label="Delete">✕</button>
+  </div>
+  <div id="colors" class="row"></div>
+  <div id="tools" class="row"></div>
+  <div class="row actions">
+    <button id="undo" aria-label="Undo">↶</button>
+    <span class="grow"></span>
+    <button id="closePoly" class="pill ghost hidden">Close shape</button>
+    <button id="done" class="pill">Done</button>
+  </div>
+  <a id="get" class="get" href="#">Get Likensy to keep your stars and start a streak</a>
+</main>
+<div id="result" class="sheet hidden"></div>
+<div id="error" class="error hidden">
+  <h1>Hmm.</h1>
+  <p id="errmsg">This challenge can't be read.</p>
+  <a class="pill" href="https://play.google.com/store/apps/details?id=com.adaptationapps.likensy">Get Likensy</a>
+</div>
+<script src="core.js"></script>
+<script src="play.js"></script>
+</body>
+</html>

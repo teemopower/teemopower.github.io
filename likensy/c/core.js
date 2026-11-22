@@ -6,7 +6,7 @@ const LK = (() => {
   const LABEL = { circle: "circle", ellipse: "oval", rect: "rectangle", rrect: "rounded rectangle", triangle: "triangle", line: "line", polyline: "path", arc: "arc", polygon: "shape", stroke: "line" };
   const STROKE = 28, PEN = 16, OUTLINE = 14, MAX_SHAPES = 250;
   // The judge's settings. Keep in step with Judge.kt.
-  const JUDGE = { pass: 60, tols: [16, 32, 56], span: 800, minSize: 80, partTol: 32, partOk: 0.55, partMissing: 0.35 };
+  const JUDGE = { pass: 65, tols: [16, 32, 56], span: 800, minSize: 80, partTol: 32, partOk: 0.55, partMissing: 0.35 };
   JUDGE.two = Math.min(JUDGE.pass + 15, 95); JUDGE.three = Math.min(JUDGE.pass + 27, 97);
 
   // ---------- link codec ----------
@@ -211,7 +211,9 @@ const LK = (() => {
       if (rec >= JUDGE.partOk) ok.add(i); else misses.push({ target: i, why: rec < JUDGE.partMissing ? "missing" : "off" });
     }
     const precision = dP.filter(d => d <= JUDGE.partTol).length / dP.length;
-    let stars = starsFor(percent); if (misses.length) stars = Math.min(stars, 1);
+    // Two or more whole parts missing means it's a different picture: not a pass, whatever the %.
+    let stars = starsFor(percent);
+    if (misses.filter(m => m.why === "missing").length >= 2) stars = 0; else if (misses.length) stars = Math.min(stars, 1);
     return { percent, stars, misses, ok, extra: precision < 0.7 };
   }
 
